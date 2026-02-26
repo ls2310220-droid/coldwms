@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ColdWMS · Câmara Fria</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080c18;--surface:#0e1624;--surface2:#131e2e;--border:#1a2840;--border2:#243450;
+  --blue:#00c6ff;--ice:#a8edea;--green:#00e676;--warm:#f7971e;--red:#ff4d6d;--purple:#c084fc;
+  --text:#dde6f0;--muted:#4e6380;--muted2:#7a93b0;
+  --mono:'Space Mono',monospace;--sans:'Syne',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;}
+
+/* ── LOGIN OVERLAY ── */
+#login-overlay{
+  position:fixed;inset:0;background:rgba(8,12,24,.97);z-index:1000;
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);
+}
+.login-box{
+  background:var(--surface);border:1px solid var(--border2);border-radius:14px;
+  padding:2.5rem;width:340px;text-align:center;
+}
+.login-box h2{font-size:1.4rem;font-weight:800;margin-bottom:.3rem;}
+.login-box p{font-size:.72rem;color:var(--muted2);margin-bottom:1.5rem;font-family:var(--mono);}
+.login-box .fg{text-align:left;margin-bottom:.8rem;}
+.login-box .fg label{font-size:.6rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);display:block;margin-bottom:.3rem;}
+.login-box .fg input,.login-box .fg select{
+  width:100%;background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:6px;
+  color:var(--text);padding:.55rem .8rem;font-family:var(--mono);font-size:.85rem;outline:none;
+}
+.login-box .fg input:focus{border-color:var(--blue);}
+
+/* ── SYNC STATUS ── */
+#sync-bar{
+  display:flex;align-items:center;gap:.5rem;padding:.35rem 1.5rem;
+  background:rgba(0,0,0,.3);border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:.62rem;
+}
+.sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sync-dot.green{background:var(--green);box-shadow:0 0 6px var(--green);}
+.sync-dot.yellow{background:var(--warm);animation:pulse 1s infinite;}
+.sync-dot.red{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:.75rem 1.5rem;border-bottom:1px solid var(--border);
+  background:rgba(8,12,24,.95);backdrop-filter:blur(12px);
+  position:sticky;top:0;z-index:200;
+}
+.logo{display:flex;align-items:center;gap:.7rem;}
+.logo-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--blue),var(--ice));border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.9rem;}
+.logo h1{font-size:.95rem;font-weight:800;}
+.logo sub{font-family:var(--mono);font-size:.58rem;color:var(--blue);letter-spacing:2px;display:block;}
+.hstats{display:flex;gap:1rem;align-items:center;}
+.hstat{text-align:right;font-family:var(--mono);font-size:.62rem;color:var(--muted2);}
+.hstat strong{display:block;font-size:.9rem;color:var(--ice);}
+.hstat.ok strong{color:var(--green);}
+.sep{width:1px;height:20px;background:var(--border2);}
+
+#alert-banner{display:none;padding:.45rem 1.5rem;background:rgba(255,77,109,.1);border-bottom:1px solid rgba(255,77,109,.3);font-family:var(--mono);font-size:.7rem;color:var(--red);animation:pulse 1.5s infinite;}
+
+.kpi-bar{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--border);}
+.kpi{background:var(--surface);padding:.75rem 1.1rem;cursor:pointer;transition:background .15s;position:relative;border-right:1px solid var(--border);}
+.kpi:last-child{border-right:none;}
+.kpi:hover{background:var(--surface2);}
+.kpi.active{background:#0b1628;}
+.kpi.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--blue);}
+.kpi-lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:.2rem;}
+.kpi-val{font-size:1.3rem;font-weight:800;line-height:1;}
+.kpi-sub{font-family:var(--mono);font-size:.58rem;color:var(--muted);margin-top:.2rem;}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:3px;vertical-align:middle;}
+
+.nav-flow{display:flex;border-top:1px solid var(--border);background:var(--surface);}
+.nav-btn{flex:1;padding:.65rem;background:var(--surface);border:none;cursor:pointer;font-family:var(--sans);font-size:.7rem;font-weight:600;color:var(--muted2);transition:all .15s;border-right:1px solid var(--border);letter-spacing:.3px;}
+.nav-btn:last-child{border-right:none;}
+.nav-btn:hover{background:var(--surface2);color:var(--text);}
+.nav-btn.active{background:#0b1628;color:var(--blue);border-bottom:2px solid var(--blue);}
+
+.main{background:var(--border);}
+.module{background:var(--surface);padding:1.3rem 1.4rem;display:none;animation:fadeUp .2s ease;}
+.module.active{display:block;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+.mod-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem;padding-bottom:.8rem;border-bottom:1px solid var(--border);}
+.mod-title{display:flex;align-items:center;gap:.5rem;}
+.mod-title h2{font-size:.88rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;}
+.badge{font-family:var(--mono);font-size:.57rem;padding:3px 7px;border-radius:3px;letter-spacing:1px;text-transform:uppercase;}
+.b-blue{background:rgba(0,198,255,.1);color:var(--blue);border:1px solid rgba(0,198,255,.2);}
+.b-green{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.2);}
+.b-warm{background:rgba(247,151,30,.1);color:var(--warm);border:1px solid rgba(247,151,30,.2);}
+.b-red{background:rgba(255,77,109,.1);color:var(--red);border:1px solid rgba(255,77,109,.2);}
+.b-purple{background:rgba(192,132,252,.1);color:var(--purple);border:1px solid rgba(192,132,252,.2);}
+
+.fg{display:flex;flex-direction:column;gap:.25rem;}
+.fg label{font-size:.58rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);}
+.fg input,.fg select{background:rgba(0,0,0,.25);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:.42rem .7rem;font-family:var(--mono);font-size:.76rem;transition:border-color .15s;outline:none;}
+.fg input:focus,.fg select:focus{border-color:var(--blue);}
+.fg select option{background:var(--surface);}
+
+.btn{padding:.48rem .95rem;border-radius:5px;border:none;cursor:pointer;font-family:var(--sans);font-weight:600;font-size:.76rem;transition:all .15s;}
+.btn-primary{background:var(--blue);color:#000;}
+.btn-primary:hover{background:var(--ice);}
+.btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border2);}
+.btn-ghost:hover{border-color:var(--blue);color:var(--blue);}
+
+.divider{height:1px;background:var(--border);margin:.7rem 0;}
+.section-lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:.55rem;}
+
+.tbl{width:100%;border-collapse:collapse;font-size:.7rem;}
+.tbl th{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);text-align:left;padding:.32rem .48rem;border-bottom:1px solid var(--border);}
+.tbl td{padding:.38rem .48rem;border-bottom:1px solid rgba(26,40,64,.4);font-family:var(--mono);}
+.tbl tr:hover td{background:rgba(0,198,255,.025);}
+.tbl thead{position:sticky;top:0;background:var(--surface);z-index:10;}
+
+.card{background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:6px;padding:.65rem;}
+.card-lbl{font-size:.57rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);}
+.card-val{font-family:var(--mono);font-size:1.3rem;font-weight:700;margin-top:.18rem;}
+
+.pbar{height:4px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;margin:.28rem 0;}
+.pfill{height:100%;border-radius:2px;transition:width .5s;}
+
+.scan-box{background:rgba(0,198,255,.03);border:1.5px solid rgba(0,198,255,.25);border-radius:9px;padding:1rem;}
+.scan-input{width:100%;padding:.65rem 1rem .65rem 2.3rem;background:rgba(0,0,0,.3);border:2px solid var(--blue);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:.9rem;outline:none;}
+.scan-input.error{border-color:var(--red)!important;animation:shake .3s;}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+.turno-btns{display:flex;gap:.3rem;margin-top:.7rem;}
+.turno-btn{flex:1;padding:.32rem;font-size:.6rem;font-family:var(--sans);font-weight:700;background:rgba(0,0,0,.2);border:1px solid var(--border2);border-radius:4px;cursor:pointer;color:var(--muted2);transition:all .15s;text-transform:uppercase;letter-spacing:.5px;}
+.turno-btn.active{background:rgba(0,198,255,.1);border-color:var(--blue);color:var(--blue);}
+
+.turno-summary{display:flex;gap:.4rem;margin-top:.7rem;}
+.ts-pill{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.45rem .5rem;text-align:center;}
+.ts-pill.active-t{border-color:var(--blue);background:rgba(0,198,255,.05);}
+.ts-pill .tp-lbl{font-size:.56rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;}
+.ts-pill .tp-val{font-family:var(--mono);font-size:.95rem;font-weight:700;}
+.ts-pill .tp-av{font-family:var(--mono);font-size:.55rem;color:var(--muted);display:block;}
+
+.temp-alert-prev{display:none;margin-top:.5rem;padding:.42rem .7rem;border-radius:5px;background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);font-family:var(--mono);font-size:.62rem;color:var(--red);}
+
+/* spinner */
+.spinner{width:14px;height:14px;border:2px solid rgba(0,198,255,.2);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle;margin-right:5px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#toast{position:fixed;bottom:1.1rem;right:1.1rem;z-index:9999;background:var(--surface2);border:1px solid var(--green);color:var(--green);padding:.55rem 1rem;border-radius:6px;font-family:var(--mono);font-size:.7rem;transform:translateY(70px);opacity:0;transition:all .22s;pointer-events:none;max-width:320px;}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast.warn{border-color:var(--red);color:var(--red);}
+#toast.info{border-color:var(--blue);color:var(--blue);}
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div style="font-size:2rem;margin-bottom:.5rem;">❄️</div>
+    <h2>ColdWMS</h2>
+    <p>Câmara Fria · Packing House</p>
+    <div class="fg"><label>Seu nome / Operador</label><input type="text" id="login-nome" placeholder="Ex: João Silva" autofocus onkeydown="if(event.key==='Enter')entrar()"></div>
+    <div class="fg"><label>Turno</label>
+      <select id="login-turno">
+        <option value="Manhã">☀ Manhã</option>
+        <option value="Tarde">🌤 Tarde</option>
+        <option value="Noite">🌙 Noite</option>
+      </select>
+    </div>
+    <div class="fg" style="margin-bottom:1.2rem;">
+      <label>URL do Google Apps Script</label>
+      <input type="text" id="login-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:.7rem;">
+      <span style="font-size:.58rem;color:var(--muted);margin-top:.3rem;display:block;">Cole a URL após implantar o script. <a href="#" onclick="mostrarGuia()" style="color:var(--blue);">Como fazer?</a></span>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:.7rem;font-size:.88rem;" onclick="entrar()">Entrar no Sistema</button>
+    <button class="btn btn-ghost" style="width:100%;padding:.5rem;font-size:.72rem;margin-top:.5rem;" onclick="entrarOffline()">Usar sem Google Sheets (offline)</button>
+  </div>
+</div>
+
+<!-- ── GUIA MODAL ── -->
+<div id="guia-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:2rem;max-width:500px;width:90%;">
+    <h3 style="margin-bottom:1rem;color:var(--blue);">📋 Como conectar ao Google Sheets</h3>
+    <div style="font-family:var(--mono);font-size:.7rem;line-height:1.8;color:var(--muted2);">
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">1.</span> Abra o Google Sheets e crie uma planilha nova</div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">2.</span> Clique em <b style="color:var(--text)">Extensões → Apps Script</b></div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">3.</span> Apague o código existente e cole o conteúdo do arquivo <b style="color:var(--text)">ColdWMS_AppScript.js</b></div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">4.</span> Salve (Ctrl+S) e clique em <b style="color:var(--text)">Executar → setup</b> para criar as abas</div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">5.</span> Clique em <b style="color:var(--text)">Implantar → Nova implantação</b></div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">6.</span> Tipo: <b style="color:var(--text)">App da Web</b> · Acesso: <b style="color:var(--text)">Qualquer pessoa</b></div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">7.</span> Copie a URL gerada e cole no campo acima</div>
+      <div style="margin-bottom:.5rem;"><span style="color:var(--blue);font-weight:700;">8.</span> Hospede este HTML em qualquer lugar (GitHub Pages, Netlify, pen drive com link local)</div>
+      <div style="margin-top:1rem;padding:.7rem;background:rgba(0,198,255,.05);border-radius:6px;border:1px solid rgba(0,198,255,.15);">
+        💡 <b style="color:var(--text)">Dica:</b> Depois que a URL estiver configurada, todos os operadores usam o mesmo link HTML. Os dados vão direto para o Google Sheets em tempo real.
+      </div>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:1.2rem;" onclick="document.getElementById('guia-modal').style.display='none'">Fechar</button>
+  </div>
+</div>
+
+<!-- ── SYNC BAR ── -->
+<div id="sync-bar">
+  <div class="sync-dot" id="sync-dot"></div>
+  <span id="sync-status">Conectando...</span>
+  <span style="margin-left:auto;color:var(--muted);">Operador: <span id="hdr-operador" style="color:var(--text);">—</span></span>
+  <span style="color:var(--muted);margin-left:1rem;">Último sync: <span id="ultimo-sync">—</span></span>
+  <button class="btn btn-ghost" style="padding:2px 8px;font-size:.58rem;margin-left:.8rem;" onclick="sincronizar()">↻ Sincronizar</button>
+</div>
+
+<!-- ── ALERT BANNER ── -->
+<div id="alert-banner"></div>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">❄️</div>
+    <div><h1>ColdWMS</h1><sub>GESTÃO · CÂMARA FRIA</sub></div>
+  </div>
+  <div class="hstats">
+    <div class="hstat"><strong id="clock">--:--</strong>Horário</div>
+    <div class="sep"></div>
+    <div class="hstat"><strong>-4°C</strong>Câmara</div>
+    <div class="sep"></div>
+    <div class="hstat ok"><strong>● ON</strong>Sistema</div>
+    <div class="sep"></div>
+    <div class="hstat">
+      <strong id="hdr-limite">Limite: 4°C</strong>
+      <span style="display:flex;align-items:center;gap:.3rem;margin-top:.15rem;">
+        <input type="number" id="inp-limite" value="4" step="0.5"
+          style="width:48px;background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:4px;color:var(--blue);font-family:var(--mono);font-size:.68rem;padding:2px 4px;outline:none;text-align:center;"
+          onchange="atualizarLimite(this.value)">
+        <span style="font-size:.56rem;color:var(--muted);">°C max</span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<!-- ── KPI BAR ── -->
+<div class="kpi-bar">
+  <div class="kpi active" id="kpi-tab-recepcao" onclick="switchModule('recepcao')">
+    <div class="kpi-lbl">📥 Recepção</div>
+    <div class="kpi-val" style="color:var(--blue);" id="kpi-rec-total">0</div>
+    <div class="kpi-sub"><span class="dot" style="background:var(--green)"></span>pallets hoje</div>
+  </div>
+  <div class="kpi" id="kpi-tab-prefrio" onclick="switchModule('prefrio')">
+    <div class="kpi-lbl">🧊 Pré-Frio</div>
+    <div class="kpi-val" style="color:var(--ice);">-2°C</div>
+    <div class="kpi-sub"><span class="dot" style="background:var(--warm)"></span>monitorando</div>
+  </div>
+  <div class="kpi" id="kpi-tab-armazena" onclick="switchModule('armazena')">
+    <div class="kpi-lbl">🏭 Armazena.</div>
+    <div class="kpi-val" style="color:var(--warm);" id="kpi-arm-total">—</div>
+    <div class="kpi-sub"><span class="dot" style="background:var(--green)"></span>posições</div>
+  </div>
+  <div class="kpi" id="kpi-tab-expedicao" onclick="switchModule('expedicao')">
+    <div class="kpi-lbl">🚚 Expedição</div>
+    <div class="kpi-val" style="color:var(--green);" id="kpi-exp-total">—</div>
+    <div class="kpi-sub"><span class="dot" style="background:var(--muted)"></span>movimentações</div>
+  </div>
+  <div class="kpi" id="kpi-tab-estoque" onclick="switchModule('estoque')">
+    <div class="kpi-lbl">📊 Estoque</div>
+    <div class="kpi-val" style="color:var(--purple);" id="kpi-est-total">0</div>
+    <div class="kpi-sub"><span class="dot" style="background:var(--purple)"></span>saldo em câmara</div>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+<!-- RECEPÇÃO -->
+<div class="module active" id="mod-recepcao">
+  <div class="mod-hdr">
+    <div class="mod-title">
+      <span style="font-size:1rem;">📥</span>
+      <h2>Recepção — Câmara Fria</h2>
+      <span class="badge b-blue">PACKING HOUSE → CÂMARA</span>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+      <span class="badge b-warm">Turno: <span id="badge-turno">—</span></span>
+      <span class="badge b-green">● <span id="badge-count">0</span> pallets hoje</span>
+      <span id="saving-indicator" style="font-family:var(--mono);font-size:.62rem;color:var(--muted);display:none;"><span class="spinner"></span>Salvando...</span>
+    </div>
+  </div>
+
+  <!-- FORMULÁRIO — linha horizontal completa -->
+  <div style="background:rgba(0,198,255,.03);border:1.5px solid rgba(0,198,255,.2);border-radius:9px;padding:.9rem 1rem;margin-bottom:1rem;">
+
+    <!-- LINHA 1: Scan + campos principais -->
+    <div style="display:grid;grid-template-columns:220px 1fr 1fr 1fr 1fr 1fr 1fr;gap:.6rem;align-items:end;margin-bottom:.6rem;">
+      <div>
+        <div class="section-lbl" style="color:var(--blue);margin-bottom:.4rem;">▐▌ ID Pallet (Scan)</div>
+        <div style="position:relative;">
+          <input type="text" id="inp-barcode" class="scan-input" style="padding:.55rem .8rem .55rem 2.2rem;font-size:.82rem;"
+            placeholder="Aponte o leitor..."
+            onkeydown="if(event.key==='Enter')confirmarPallet()">
+          <span style="position:absolute;left:.6rem;top:50%;transform:translateY(-50%);font-size:.85rem;pointer-events:none;">📦</span>
+        </div>
+      </div>
+      <div class="fg"><label>Produto / SKU</label>
+        <select id="inp-sku">
+          <option value="">Selecione</option>
+          <option>Frango inteiro</option><option>Peito s/ osso</option>
+          <option>Coxa e sobrecoxa</option><option>Asa</option>
+          <option>Suíno corte</option><option>Bovino</option><option>Outros</option>
+        </select>
+      </div>
+      <div class="fg"><label>Linha Origem (PH)</label>
+        <select id="inp-linha">
+          <option value="">Selecione</option>
+          <option>Linha 1</option><option>Linha 2</option><option>Linha 3</option>
+          <option>Linha 4</option><option>Embalagem</option>
+        </select>
+      </div>
+      <div class="fg"><label>Temperatura (°C)</label>
+        <input type="number" step="0.1" placeholder="-2.0" id="inp-temp" oninput="previewTemp(this.value)">
+      </div>
+      <div class="fg"><label>Qtd. Caixas</label>
+        <input type="number" placeholder="0" id="inp-caixas" min="0">
+      </div>
+      <div class="fg"><label>Destino na Câmara</label>
+        <select id="inp-destino">
+          <option value="">Selecione</option>
+          <option>Câmara A — Rua 1</option><option>Câmara A — Rua 2</option>
+          <option>Câmara A — Rua 3</option><option>Câmara B — Rua 1</option>
+          <option>Câmara B — Rua 2</option><option>Pré-Frio</option>
+          <option>Câmara Export.</option>
+        </select>
+      </div>
+      <div class="fg"><label>Avaria / N. Conf.</label>
+        <select id="inp-avaria">
+          <option value="ok">✓ Sem avaria</option>
+          <option value="parcial">⚠ Parcial</option>
+          <option value="total">✕ Total</option>
+          <option value="temp">🌡 Temp. fora</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- LINHA 2: Obs + alerta + botão confirmar + turno -->
+    <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:.6rem;align-items:center;">
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <div class="fg" style="flex:1;">
+          <label>Obs. / Não conformidade</label>
+          <input type="text" placeholder="Descreva se houver problema..." id="inp-obs">
+        </div>
+        <div id="temp-alert-prev" class="temp-alert-prev" style="margin-top:1.1rem;white-space:nowrap;">🌡 Temp. acima do limite!</div>
+      </div>
+      <button class="btn btn-primary" style="padding:.52rem 1.4rem;font-size:.82rem;white-space:nowrap;align-self:end;" onclick="confirmarPallet()">
+        ✓ Confirmar Pallet
+      </button>
+      <!-- Turno inline -->
+      <div style="display:flex;flex-direction:column;gap:.3rem;align-self:end;">
+        <span style="font-size:.56rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">Turno</span>
+        <div style="display:flex;gap:.3rem;">
+          <button class="turno-btn active" id="tb-manha" onclick="setTurno('Manhã','tb-manha')" style="padding:.3rem .5rem;font-size:.58rem;">☀</button>
+          <button class="turno-btn" id="tb-tarde" onclick="setTurno('Tarde','tb-tarde')" style="padding:.3rem .5rem;font-size:.58rem;">🌤</button>
+          <button class="turno-btn" id="tb-noite" onclick="setTurno('Noite','tb-noite')" style="padding:.3rem .5rem;font-size:.58rem;">🌙</button>
+        </div>
+      </div>
+      <!-- Resumo turno compacto -->
+      <div style="display:flex;gap:.3rem;align-self:end;">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.3rem .5rem;text-align:center;min-width:44px;">
+          <div style="font-size:.52rem;color:var(--muted);">☀ M</div>
+          <div style="font-family:var(--mono);font-size:.82rem;font-weight:700;" id="ts-manha-val">0</div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);" id="ts-manha-av">0av</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.3rem .5rem;text-align:center;min-width:44px;">
+          <div style="font-size:.52rem;color:var(--muted);">🌤 T</div>
+          <div style="font-family:var(--mono);font-size:.82rem;font-weight:700;" id="ts-tarde-val">0</div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);" id="ts-tarde-av">0av</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.3rem .5rem;text-align:center;min-width:44px;">
+          <div style="font-size:.52rem;color:var(--muted);">🌙 N</div>
+          <div style="font-family:var(--mono);font-size:.82rem;font-weight:700;" id="ts-noite-val">0</div>
+          <div style="font-family:var(--mono);font-size:.52rem;color:var(--muted);" id="ts-noite-av">0av</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.45rem;margin-bottom:.8rem;">
+    <div class="card" style="text-align:center;"><div class="card-lbl">Pallets</div><div class="card-val" style="color:var(--blue);" id="kpi-total">0</div></div>
+    <div class="card" style="text-align:center;"><div class="card-lbl">Temp. Média</div><div class="card-val" style="color:var(--ice);" id="kpi-temp">—</div></div>
+    <div class="card" style="text-align:center;"><div class="card-lbl">Avarias</div><div class="card-val" style="color:var(--red);" id="kpi-avarias">0</div></div>
+    <div class="card" style="text-align:center;"><div class="card-lbl">Total Caixas</div><div class="card-val" style="color:var(--green);" id="kpi-caixas">0</div></div>
+  </div>
+
+  <!-- Filtros + busca -->
+  <div style="display:flex;gap:.38rem;margin-bottom:.55rem;align-items:center;">
+    <span style="font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Filtrar:</span>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" id="f-todos" onclick="filtrar('todos')">Todos</button>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" id="f-ok" onclick="filtrar('ok')">✓ OK</button>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" id="f-avaria" onclick="filtrar('avaria')">⚠ Avarias</button>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" id="f-alerta" onclick="filtrar('alerta')">🌡 Alertas</button>
+    <input id="inp-busca" type="text" placeholder="Buscar ID..." oninput="buscar(this.value)"
+      style="margin-left:auto;background:rgba(0,0,0,.2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:2px 8px;font-family:var(--mono);font-size:.65rem;outline:none;width:130px;">
+  </div>
+
+  <!-- Tabela — ocupa toda a largura -->
+  <div style="max-height:380px;overflow-y:auto;border-radius:5px;border:1px solid var(--border);">
+    <table class="tbl">
+      <thead><tr><th>#</th><th>ID Pallet</th><th>SKU</th><th>Origem</th><th>Cx.</th><th>Temp.</th><th>Destino</th><th>Avaria</th><th>Turno</th><th>Operador</th><th>Hora</th></tr></thead>
+      <tbody id="pallet-tbody"><tr id="empty-row"><td colspan="11" style="text-align:center;padding:1.8rem;color:var(--muted);font-size:.68rem;">📦 Aguardando scan do primeiro pallet...</td></tr></tbody>
+        </table>
+      </div>
+  <div style="display:flex;gap:.4rem;justify-content:flex-end;margin-top:.5rem;">
+    <button class="btn btn-ghost" style="font-size:.65rem;" onclick="exportarCSV()">⬇ Exportar CSV</button>
+    <button class="btn btn-ghost" style="font-size:.65rem;color:var(--blue);border-color:var(--blue);" onclick="switchModule('estoque')">→ Ver Estoque</button>
+  </div>
+</div>
+
+<!-- ESTOQUE -->
+<div class="module" id="mod-estoque">
+  <div class="mod-hdr">
+    <div class="mod-title"><span style="font-size:1rem">📊</span><h2>Planilha de Estoque</h2><span class="badge b-purple">ENTRADAS & SAÍDAS</span></div>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+      <span class="badge b-green">Saldo: <span id="est-saldo">0</span> pallets</span>
+      <button class="btn btn-ghost" style="font-size:.62rem;" onclick="exportarEstoque()">⬇ Exportar CSV</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.45rem;margin-bottom:1rem;">
+    <div class="card" style="text-align:center;border-color:rgba(0,198,255,.15);"><div class="card-lbl">Entradas</div><div class="card-val" style="color:var(--blue);" id="est-entradas">0</div></div>
+    <div class="card" style="text-align:center;border-color:rgba(247,151,30,.15);"><div class="card-lbl">Saídas</div><div class="card-val" style="color:var(--warm);" id="est-saidas">0</div></div>
+    <div class="card" style="text-align:center;border-color:rgba(0,230,118,.15);"><div class="card-lbl">Saldo</div><div class="card-val" style="color:var(--green);" id="est-saldo2">0</div></div>
+    <div class="card" style="text-align:center;border-color:rgba(255,77,109,.15);"><div class="card-lbl">Avarias</div><div class="card-val" style="color:var(--red);" id="est-avarias">0</div></div>
+    <div class="card" style="text-align:center;border-color:rgba(192,132,252,.15);"><div class="card-lbl">Total Caixas</div><div class="card-val" style="color:var(--purple);" id="est-caixas">0</div></div>
+  </div>
+  <!-- Form manual -->
+  <div style="background:rgba(0,0,0,.18);border:1px solid var(--border);border-radius:7px;padding:.9rem;margin-bottom:.9rem;">
+    <div class="section-lbl">+ Lançamento Manual de Movimentação</div>
+    <div style="display:grid;grid-template-columns:110px 1fr 1fr 1fr 1fr 1fr auto;gap:.45rem;align-items:end;">
+      <div class="fg"><label>Tipo</label><select id="mov-tipo"><option value="entrada">📥 Entrada</option><option value="saida">🚚 Saída</option><option value="ajuste">🔧 Ajuste</option></select></div>
+      <div class="fg"><label>ID Pallet</label><input type="text" placeholder="PAL-0000" id="mov-id"></div>
+      <div class="fg"><label>SKU</label><select id="mov-sku"><option value="">Selecione</option><option>Frango inteiro</option><option>Peito s/ osso</option><option>Coxa e sobrecoxa</option><option>Suíno corte</option><option>Bovino</option><option>Outros</option></select></div>
+      <div class="fg"><label>Qtd. Caixas</label><input type="number" placeholder="0" id="mov-caixas" min="0"></div>
+      <div class="fg"><label>Posição / Câmara</label><input type="text" placeholder="A-1-01" id="mov-posicao"></div>
+      <div class="fg"><label>Obs.</label><input type="text" placeholder="Opcional" id="mov-obs"></div>
+      <button class="btn btn-primary" style="white-space:nowrap;" onclick="adicionarMovimentacao()">+ Lançar</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:.38rem;margin-bottom:.55rem;align-items:center;">
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" onclick="filtrarEst('todos')" id="ef-todos">Todos</button>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" onclick="filtrarEst('entrada')" id="ef-entrada">📥 Entradas</button>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" onclick="filtrarEst('saida')" id="ef-saida">🚚 Saídas</button>
+    <button class="btn btn-ghost" style="font-size:.58rem;padding:2px 8px;" onclick="filtrarEst('ajuste')" id="ef-ajuste">🔧 Ajustes</button>
+    <input type="text" placeholder="Buscar pallet ou produto..." oninput="buscarEst(this.value)"
+      style="margin-left:auto;background:rgba(0,0,0,.2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 8px;font-family:var(--mono);font-size:.65rem;outline:none;width:190px;">
+  </div>
+  <div style="max-height:360px;overflow-y:auto;border-radius:5px;border:1px solid var(--border);">
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Tipo</th><th>ID Pallet</th><th>SKU</th><th>Caixas</th><th>Posição</th><th>Origem</th><th>Obs.</th><th>Operador</th><th>Data/Hora</th><th>Turno</th></tr></thead>
+      <tbody id="est-tbody"><tr id="est-empty-row"><td colspan="11" style="text-align:center;padding:2rem;color:var(--muted);font-size:.68rem;">📊 Nenhuma movimentação. Pallets da Recepção entram aqui automaticamente.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PRÉ-FRIO (simplificado) -->
+<div class="module" id="mod-prefrio">
+  <div class="mod-hdr"><div class="mod-title"><span style="font-size:1rem">🧊</span><h2>Pré-Frio</h2><span class="badge b-blue">MONITORAMENTO</span></div><span class="badge b-warm">72% ocupação</span></div>
+  <div style="text-align:center;padding:3rem;color:var(--muted);">Módulo em construção — dados virão do Google Sheets</div>
+</div>
+
+<!-- ARMAZENAMENTO (simplificado) -->
+<div class="module" id="mod-armazena">
+  <div class="mod-hdr"><div class="mod-title"><span style="font-size:1rem">🏭</span><h2>Armazenamento</h2><span class="badge b-warm">INVENTÁRIO</span></div></div>
+  <div style="text-align:center;padding:3rem;color:var(--muted);">Módulo em construção — dados virão do Google Sheets</div>
+</div>
+
+<!-- EXPEDIÇÃO (simplificado) -->
+<div class="module" id="mod-expedicao">
+  <div class="mod-hdr"><div class="mod-title"><span style="font-size:1rem">🚚</span><h2>Expedição</h2><span class="badge b-green">PICKING + SAÍDA</span></div></div>
+  <div style="text-align:center;padding:3rem;color:var(--muted);">Módulo em construção — dados virão do Google Sheets</div>
+</div>
+
+</div>
+
+<!-- NAV -->
+<div class="nav-flow">
+  <button class="nav-btn active" id="nav-recepcao" onclick="switchModule('recepcao')">📥 Recepção</button>
+  <button class="nav-btn" id="nav-prefrio" onclick="switchModule('prefrio')">🧊 Pré-Frio</button>
+  <button class="nav-btn" id="nav-armazena" onclick="switchModule('armazena')">🏭 Armazenamento</button>
+  <button class="nav-btn" id="nav-expedicao" onclick="switchModule('expedicao')">🚚 Expedição</button>
+  <button class="nav-btn" id="nav-estoque" onclick="switchModule('estoque')">📊 Estoque</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIG & ESTADO GLOBAL
+// ══════════════════════════════════════════
+let API_URL      = '';
+let OPERADOR     = '';
+let turnoAtivo   = 'Manhã';
+let tempLimite   = 4;
+let palletsDia   = [];
+let estoqueMovs  = [];
+let filtroAtivo  = 'todos';
+let filtroEst    = 'todos';
+let modoOffline  = false;
+const turnoData  = {Manhã:{p:0,a:0},Tarde:{p:0,a:0},Noite:{p:0,a:0}};
+
+// ══════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════
+function entrar(){
+  const nome = document.getElementById('login-nome').value.trim();
+  const url  = document.getElementById('login-url').value.trim();
+  const turno= document.getElementById('login-turno').value;
+  if(!nome){ showToast('Informe seu nome para entrar',true); return; }
+  OPERADOR = nome;
+  API_URL  = url;
+  modoOffline = !url;
+  setTurno(turno, 'tb-'+{Manhã:'manha',Tarde:'tarde',Noite:'noite'}[turno]);
+  document.getElementById('hdr-operador').textContent = nome;
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('inp-barcode').focus();
+  if(url){ sincronizar(); setInterval(sincronizar, 30000); }
+  else{ setSyncStatus('offline','Modo offline — dados não serão salvos no Sheets'); }
+  showToast('Bem-vindo, '+nome+'! Turno: '+turno, false, 'info');
+}
+function entrarOffline(){
+  document.getElementById('login-nome').value = document.getElementById('login-nome').value || 'Operador';
+  document.getElementById('login-url').value = '';
+  entrar();
+}
+function mostrarGuia(){ document.getElementById('guia-modal').style.display='flex'; }
+
+// ══════════════════════════════════════════
+// SYNC / API
+// ══════════════════════════════════════════
+function setSyncStatus(status, msg){
+  const dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot ' + status;
+  document.getElementById('sync-status').textContent = msg;
+}
+
+async function api(action, sheet, dados){
+  if(modoOffline || !API_URL) return {ok:true,offline:true};
+  setSyncStatus('yellow','Sincronizando...');
+  document.getElementById('saving-indicator').style.display='inline';
+  try {
+    const res = await fetch(API_URL, {
+      method:'POST',
+      body: JSON.stringify({action, sheet, dados}),
+    });
+    const data = await res.json();
+    document.getElementById('saving-indicator').style.display='none';
+    document.getElementById('ultimo-sync').textContent =
+      new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    setSyncStatus('green','Conectado ao Google Sheets');
+    return data;
+  } catch(err){
+    document.getElementById('saving-indicator').style.display='none';
+    setSyncStatus('red','Erro de conexão — salvando localmente');
+    return {ok:false, erro:err.message};
+  }
+}
+
+async function sincronizar(){
+  if(modoOffline || !API_URL) return;
+  try {
+    const data = await api('dashboard','',{});
+    if(data.ok && data.recepcao){
+      document.getElementById('kpi-rec-total').textContent = data.recepcao.palletsHoje;
+      document.getElementById('kpi-est-total').textContent = data.estoque.saldo;
+      document.getElementById('est-saldo').textContent  = data.estoque.saldo;
+      document.getElementById('est-saldo2').textContent = data.estoque.saldo;
+      if(data.totais){
+        document.getElementById('kpi-arm-total').textContent = data.totais.recepcao;
+        document.getElementById('kpi-exp-total').textContent = data.totais.expedicao;
+      }
+    }
+  } catch(e){}
+}
+
+// ══════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════
+function updateClock(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock,1000); updateClock();
+
+// ══════════════════════════════════════════
+// MÓDULOS
+// ══════════════════════════════════════════
+const MODS=['recepcao','prefrio','armazena','expedicao','estoque'];
+function switchModule(name){
+  MODS.forEach(m=>{
+    document.getElementById('mod-'+m).classList.remove('active');
+    document.getElementById('nav-'+m).classList.remove('active');
+    const k=document.getElementById('kpi-tab-'+m); if(k) k.classList.remove('active');
+  });
+  document.getElementById('mod-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  const k=document.getElementById('kpi-tab-'+name); if(k) k.classList.add('active');
+  if(name==='recepcao') setTimeout(()=>document.getElementById('inp-barcode').focus(),80);
+}
+
+// ══════════════════════════════════════════
+// RECEPÇÃO
+// ══════════════════════════════════════════
+function atualizarLimite(v){ tempLimite=parseFloat(v)||4; document.getElementById('hdr-limite').textContent='Limite: '+tempLimite+'°C'; }
+function previewTemp(v){ const al=document.getElementById('temp-alert-prev'); if(v!==''&&parseFloat(v)>tempLimite){al.style.display='block';al.textContent='🌡 '+v+'°C acima do limite ('+tempLimite+'°C)';}else{al.style.display='none';} }
+
+function setTurno(t,btnId){
+  turnoAtivo=t;
+  document.getElementById('badge-turno').textContent=t;
+  document.querySelectorAll('.turno-btn').forEach(b=>b.classList.remove('active'));
+  const btn=document.getElementById(btnId); if(btn) btn.classList.add('active');
+  ['Manhã','Tarde','Noite'].forEach(tt=>{
+    const k={Manhã:'manha',Tarde:'tarde',Noite:'noite'}[tt];
+    const el=document.getElementById('ts-'+k); if(el) el.classList.toggle('active-t',tt===t);
+  });
+}
+
+async function confirmarPallet(){
+  const barcode=document.getElementById('inp-barcode').value.trim();
+  if(!barcode){
+    const el=document.getElementById('inp-barcode'); el.classList.add('error');
+    setTimeout(()=>el.classList.remove('error'),500); el.focus(); return;
+  }
+  if(palletsDia.find(p=>p.id===barcode)){
+    showToast('⚠ Pallet '+barcode+' já registrado nesta sessão!',true);
+    document.getElementById('inp-barcode').select(); return;
+  }
+  const sku    =document.getElementById('inp-sku').value||'—';
+  const linha  =document.getElementById('inp-linha').value||'—';
+  const tempVal=document.getElementById('inp-temp').value;
+  const temp   =tempVal!==''?parseFloat(tempVal):null;
+  const caixas =parseInt(document.getElementById('inp-caixas').value)||0;
+  const destino=document.getElementById('inp-destino').value||'—';
+  const avaria =document.getElementById('inp-avaria').value;
+  const obs    =document.getElementById('inp-obs').value.trim();
+  const hora   =new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const data   =new Date().toLocaleDateString('pt-BR');
+  const tempAlerta=temp!==null&&temp>tempLimite;
+
+  if(tempAlerta){
+    document.getElementById('alert-banner').style.display='block';
+    document.getElementById('alert-banner').textContent=
+      '🌡 ALERTA: Pallet '+barcode+' com '+temp+'°C (limite '+tempLimite+'°C) — Operador: '+OPERADOR+' — '+hora;
+  }
+
+  const pallet={id:barcode,sku,linha,temp,caixas,destino,avaria,obs,hora,data,turno:turnoAtivo,operador:OPERADOR,tempAlerta};
+  palletsDia.push(pallet);
+  turnoData[turnoAtivo].p++;
+  if(avaria!=='ok') turnoData[turnoAtivo].a++;
+
+  adicionarLinhaRecepcao(pallet,palletsDia.length);
+  atualizarKPIsRecepcao();
+  atualizarTurnoSummary();
+
+  // Salva no Sheets + estoque
+  api('inserir','Recepção',pallet);
+  adicionarMovEstoque({tipo:'entrada',id:barcode,sku,caixas,posicao:destino,origem:linha,obs:obs||'Recepção',hora,data,turno:turnoAtivo,operador:OPERADOR});
+
+  if(!tempAlerta) showToast('✓ Pallet '+barcode+' — '+destino);
+  else showToast('🚨 ALERTA TEMP: '+barcode+' = '+temp+'°C!',true);
+
+  ['inp-barcode','inp-temp','inp-caixas','inp-obs'].forEach(id=>{document.getElementById(id).value='';});
+  document.getElementById('inp-avaria').value='ok';
+  document.getElementById('temp-alert-prev').style.display='none';
+  document.getElementById('inp-barcode').focus();
+}
+
+function adicionarLinhaRecepcao(p,n){
+  const tbody=document.getElementById('pallet-tbody');
+  const er=document.getElementById('empty-row'); if(er) er.remove();
+  const avCor={ok:'var(--green)',parcial:'var(--warm)',total:'var(--red)',temp:'var(--red)'}[p.avaria]||'var(--muted)';
+  const avTxt={ok:'✓ OK',parcial:'⚠ Parcial',total:'✕ Total',temp:'🌡 Temp'}[p.avaria]||'—';
+  const tc=p.temp!==null?(p.temp>tempLimite?'var(--red)':p.temp>0?'var(--warm)':'var(--ice)'):'var(--muted)';
+  const ts=p.temp!==null?p.temp.toFixed(1)+'°C':'—';
+  const ti={Manhã:'☀',Tarde:'🌤',Noite:'🌙'}[p.turno]||'';
+  const row=document.createElement('tr');
+  row.dataset.avaria=p.avaria; row.dataset.id=p.id.toLowerCase(); row.dataset.alerta=p.tempAlerta?'1':'0';
+  if(p.tempAlerta) row.style.background='rgba(255,77,109,.05)';
+  row.innerHTML=`<td style="color:var(--muted);">${n}</td>
+    <td><span style="background:rgba(0,198,255,.1);color:var(--blue);padding:2px 5px;border-radius:3px;">${p.id}</span></td>
+    <td>${p.sku}</td><td style="color:var(--muted2);">${p.linha}</td>
+    <td>${p.caixas||'—'}</td>
+    <td style="font-weight:700;color:${tc};">${ts}</td>
+    <td style="color:var(--muted2);font-size:.66rem;">${p.destino}</td>
+    <td><span class="dot" style="background:${avCor};"></span>${avTxt}</td>
+    <td style="color:var(--muted);">${ti} ${p.turno}</td>
+    <td style="color:var(--muted2);font-size:.66rem;">${p.operador}</td>
+    <td style="color:var(--muted);">${p.hora}</td>`;
+  tbody.insertBefore(row,tbody.firstChild);
+  aplicarFiltroRecepcao();
+}
+
+function atualizarKPIsRecepcao(){
+  const total=palletsDia.length;
+  const av=palletsDia.filter(p=>p.avaria!=='ok').length;
+  const cx=palletsDia.reduce((s,p)=>s+(p.caixas||0),0);
+  const ts=palletsDia.map(p=>p.temp).filter(t=>t!==null);
+  const tm=ts.length?(ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1)+'°C':'—';
+  document.getElementById('kpi-total').textContent=total;
+  document.getElementById('kpi-avarias').textContent=av;
+  document.getElementById('kpi-caixas').textContent=cx;
+  document.getElementById('kpi-temp').textContent=tm;
+  document.getElementById('badge-count').textContent=total;
+  document.getElementById('kpi-rec-total').textContent=total;
+}
+function atualizarTurnoSummary(){
+  ['Manhã','Tarde','Noite'].forEach(t=>{
+    const k={Manhã:'manha',Tarde:'tarde',Noite:'noite'}[t];
+    document.getElementById('ts-'+k+'-val').textContent=turnoData[t].p;
+    document.getElementById('ts-'+k+'-av').textContent=turnoData[t].a+' av.';
+  });
+}
+function filtrar(f){ filtroAtivo=f; document.querySelectorAll('[id^="f-"]').forEach(b=>b.style.color=''); const el=document.getElementById('f-'+f); if(el) el.style.color='var(--blue)'; aplicarFiltroRecepcao(); }
+function aplicarFiltroRecepcao(){ document.querySelectorAll('#pallet-tbody tr').forEach(row=>{ if(!row.dataset.avaria) return; let s=true; if(filtroAtivo==='ok') s=row.dataset.avaria==='ok'; if(filtroAtivo==='avaria') s=row.dataset.avaria!=='ok'; if(filtroAtivo==='alerta') s=row.dataset.alerta==='1'; row.style.display=s?'':'none'; }); }
+function buscar(q){ document.querySelectorAll('#pallet-tbody tr').forEach(row=>{ if(!row.dataset.id) return; row.style.display=row.dataset.id.includes(q.toLowerCase())?'':'none'; }); }
+
+function exportarCSV(){
+  if(!palletsDia.length){showToast('Nenhum pallet para exportar',true);return;}
+  const cols=['#','ID Pallet','SKU','Linha Origem','Caixas','Temperatura','Destino','Avaria','Turno','Operador','Hora','Data'];
+  const rows=palletsDia.map((p,i)=>[i+1,p.id,p.sku,p.linha,p.caixas,p.temp??'',p.destino,p.avaria,p.turno,p.operador,p.hora,p.data].join(';'));
+  download('\uFEFF'+[cols.join(';'),...rows].join('\n'),'recepcao_'+hoje()+'.csv','text/csv');
+  showToast('✓ CSV exportado!');
+}
+
+// ══════════════════════════════════════════
+// ESTOQUE
+// ══════════════════════════════════════════
+async function adicionarMovEstoque(mov){
+  estoqueMovs.push(mov);
+  const er=document.getElementById('est-empty-row'); if(er) er.remove();
+  const tbody=document.getElementById('est-tbody');
+  const tc={entrada:'var(--blue)',saida:'var(--warm)',ajuste:'var(--purple)'}[mov.tipo]||'var(--muted)';
+  const tt={entrada:'📥 Entrada',saida:'🚚 Saída',ajuste:'🔧 Ajuste'}[mov.tipo]||mov.tipo;
+  const ti={Manhã:'☀',Tarde:'🌤',Noite:'🌙'}[mov.turno]||'';
+  const row=document.createElement('tr');
+  row.dataset.tipo=mov.tipo; row.dataset.busca=(mov.id+mov.sku).toLowerCase();
+  row.innerHTML=`<td style="color:var(--muted);">${estoqueMovs.length}</td>
+    <td><span style="color:${tc};font-size:.68rem;">${tt}</span></td>
+    <td><span style="background:rgba(0,198,255,.1);color:var(--blue);padding:2px 5px;border-radius:3px;">${mov.id}</span></td>
+    <td>${mov.sku||'—'}</td><td>${mov.caixas||'—'}</td>
+    <td style="color:var(--muted2);">${mov.posicao||'—'}</td>
+    <td style="color:var(--muted2);">${mov.origem||'—'}</td>
+    <td style="color:var(--muted);font-size:.65rem;">${mov.obs||'—'}</td>
+    <td style="color:var(--muted2);font-size:.65rem;">${mov.operador||'—'}</td>
+    <td style="color:var(--muted);">${mov.data||'—'} ${mov.hora||'—'}</td>
+    <td style="color:var(--muted);">${ti} ${mov.turno||'—'}</td>`;
+  tbody.insertBefore(row,tbody.firstChild);
+  atualizarKPIsEstoque();
+  filtrarEstoque(filtroEst);
+  api('inserir','Estoque',mov);
+}
+
+function atualizarKPIsEstoque(){
+  const e=estoqueMovs.filter(m=>m.tipo==='entrada').length;
+  const s=estoqueMovs.filter(m=>m.tipo==='saida').length;
+  const saldo=e-s;
+  const av=palletsDia.filter(p=>p.avaria!=='ok').length;
+  const cx=estoqueMovs.filter(m=>m.tipo==='entrada').reduce((sum,m)=>sum+(parseInt(m.caixas)||0),0);
+  document.getElementById('est-entradas').textContent=e;
+  document.getElementById('est-saidas').textContent=s;
+  document.getElementById('est-saldo').textContent=saldo;
+  document.getElementById('est-saldo2').textContent=saldo;
+  document.getElementById('est-avarias').textContent=av;
+  document.getElementById('est-caixas').textContent=cx;
+  document.getElementById('kpi-est-total').textContent=saldo;
+}
+
+async function adicionarMovimentacao(){
+  const tipo=document.getElementById('mov-tipo').value;
+  const id=document.getElementById('mov-id').value.trim();
+  if(!id){showToast('⚠ Informe o ID do pallet',true);return;}
+  const sku=document.getElementById('mov-sku').value;
+  const caixas=document.getElementById('mov-caixas').value;
+  const posicao=document.getElementById('mov-posicao').value.trim();
+  const obs=document.getElementById('mov-obs').value.trim();
+  const hora=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const data=new Date().toLocaleDateString('pt-BR');
+  adicionarMovEstoque({tipo,id,sku,caixas,posicao,origem:'Manual',obs,hora,data,turno:turnoAtivo,operador:OPERADOR});
+  ['mov-id','mov-caixas','mov-posicao','mov-obs'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('mov-sku').value='';
+  showToast('✓ Movimentação lançada: '+id);
+}
+
+function filtrarEstoque(f){ filtroEst=f; document.querySelectorAll('[id^="ef-"]').forEach(b=>b.style.color=''); const el=document.getElementById('ef-'+f); if(el) el.style.color='var(--blue)'; document.querySelectorAll('#est-tbody tr').forEach(row=>{ if(!row.dataset.tipo) return; row.style.display=(f==='todos'||row.dataset.tipo===f)?'':'none'; }); }
+function buscarEst(q){ document.querySelectorAll('#est-tbody tr').forEach(row=>{ if(!row.dataset.busca) return; row.style.display=row.dataset.busca.includes(q.toLowerCase())?'':'none'; }); }
+
+function exportarEstoque(){
+  if(!estoqueMovs.length){showToast('Nenhuma movimentação para exportar',true);return;}
+  const cols=['#','Tipo','ID Pallet','SKU','Qtd. Caixas','Posição','Origem','Obs.','Operador','Data','Hora','Turno'];
+  const rows=estoqueMovs.map((m,i)=>[i+1,m.tipo,m.id,m.sku||'',m.caixas||'',m.posicao||'',m.origem||'',m.obs||'',m.operador||'',m.data||'',m.hora||'',m.turno||''].join(';'));
+  download('\uFEFF'+[cols.join(';'),...rows].join('\n'),'estoque_'+hoje()+'.csv','text/csv');
+  showToast('✓ Planilha de estoque exportada!');
+}
+
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+let toastT;
+function showToast(msg,warn=false,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='show'+(warn?' warn':type?' '+type:'');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.className='',2800);
+}
+function hoje(){ return new Date().toLocaleDateString('pt-BR').replace(/\//g,'-'); }
+function download(content,filename,type){
+  const blob=new Blob([content],{type:type+';charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=filename; a.click();
+}
+function registrar(){ showToast('✓ Registro salvo!'); }
+
+// Init sync status
+setSyncStatus('red','Aguardando login...');
+</script>
+</body>
+</html>
